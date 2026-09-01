@@ -1,0 +1,62 @@
+# ─── Python ─────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# ─── Virtual Environments ───────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ─── C++ / CUDA Build Artifacts & Binaries ──────────────────────────
+*.so
+*.dylib
+*.dll
+*.pyd
+*.o
+*.a
+*.lib
+test_engine
+engine/build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# ─── Testing & Quality ──────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ─── Datasets & Large Point Cloud Files ─────────────────────────────
+*.bin
+*.label
+*.pcd
+*.ply
+*.las
+*.laz
+data/sequences/
+datasets/
+
+# ─── Logs & Temp Files ──────────────────────────────────────────────
+*.log
+*.tmp
+*.swp
+*.swo
+
+# ─── Operating System & IDEs ────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace

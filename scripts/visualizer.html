@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>KAVACH-2.5D — Live Radar Visualizer</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0b0f19;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+    #sidebar {
+      width: 360px;
+      background: #111827;
+      border-right: 1px solid #1f2937;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    h1 {
+      font-size: 1.2rem;
+      color: #38bdf8;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: bold;
+      background: #0284c7;
+      color: white;
+    }
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #ef4444;
+      display: inline-block;
+    }
+    .status-dot.online { background: #22c55e; }
+    .metric-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .card {
+      background: #1e293b;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid #334155;
+    }
+    .card-label { font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; }
+    .card-val { font-size: 1.4rem; font-weight: bold; color: #f8fafc; margin-top: 4px; }
+    .card-val.green { color: #4ade80; }
+    .card-val.cyan { color: #38bdf8; }
+    .threat-feed {
+      flex: 1;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 10px;
+      overflow-y: auto;
+      font-size: 0.8rem;
+    }
+    .threat-item {
+      padding: 6px 8px;
+      margin-bottom: 6px;
+      border-radius: 4px;
+      background: rgba(239, 68, 68, 0.15);
+      border-left: 3px solid #ef4444;
+    }
+    #canvas-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    canvas {
+      background: #050811;
+      border-radius: 8px;
+      box-shadow: 0 0 40px rgba(0,0,0,0.8);
+    }
+    .legend {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      background: rgba(15, 23, 42, 0.85);
+      padding: 12px;
+      border-radius: 6px;
+      border: 1px solid #334155;
+      font-size: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .legend-item { display: flex; align-items: center; gap: 8px; }
+    .legend-color { width: 12px; height: 12px; border-radius: 2px; }
+  </style>
+</head>
+<body>
+  <div id="sidebar">
+    <h1>🛡️ KAVACH-2.5D</h1>
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <span id="status-dot" class="status-dot"></span>
+      <span id="status-text" style="font-size: 0.85rem; color: #94a3b8;">Disconnected</span>
+      <span id="engine-badge" class="badge" style="margin-left: auto;">...</span>
+    </div>
+
+    <div class="metric-grid">
+      <div class="card">
+        <div class="card-label">Frame Rate</div>
+        <div id="fps-val" class="card-val green">0.0 <span style="font-size: 0.8rem;">FPS</span></div>
+      </div>
+      <div class="card">
+        <div class="card-label">C++ Latency</div>
+        <div id="lat-val" class="card-val cyan">0.0 <span style="font-size: 0.8rem;">ms</span></div>
+      </div>
+      <div class="card">
+        <div class="card-label">Memory Saved</div>
+        <div id="mem-val" class="card-val green">0.0%</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Cells (M)</div>
+        <div id="cells-val" class="card-val">0</div>
+      </div>
+    </div>
+
+    <div style="font-size: 0.8rem; color: #94a3b8; font-weight: bold; text-transform: uppercase;">
+      ⚠️ Threat Alerts (<span id="threat-count">0</span>)
+    </div>
+    <div id="threat-feed" class="threat-feed">
+      <div style="color: #64748b; text-align: center; margin-top: 20px;">Waiting for stream...</div>
+    </div>
+  </div>
+
+  <div id="canvas-container">
+    <canvas id="radar" width="800" height="800"></canvas>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-color" style="background: #475569;"></div> Road (Label 0)</div>
+      <div class="legend-item"><div class="legend-color" style="background: #f59e0b;"></div> Static Obstacle (Label 1)</div>
+      <div class="legend-item"><div class="legend-color" style="background: #ef4444;"></div> Dynamic Object (Label 2)</div>
+      <div class="legend-item"><div class="legend-color" style="background: #a855f7;"></div> Negative Obstacle (Label 3)</div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('radar');
+    const ctx = canvas.getContext('2d');
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+    const engineBadge = document.getElementById('engine-badge');
+    const fpsVal = document.getElementById('fps-val');
+    const latVal = document.getElementById('lat-val');
+    const memVal = document.getElementById('mem-val');
+    const cellsVal = document.getElementById('cells-val');
+    const threatFeed = document.getElementById('threat-feed');
+    const threatCount = document.getElementById('threat-count');
+
+    const colors = {
+      0: '#475569', // Road
+      1: '#f59e0b', // Static
+      2: '#ef4444', // Dynamic
+      3: '#a855f7', // Pothole
+    };
+
+    const SCALE = 3.8; // pixels per meter
+    const CX = canvas.width / 2;
+    const CY = canvas.height / 2;
+
+    function drawGrid() {
+      ctx.fillStyle = '#050811';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Distance rings (10m, 50m, 100m)
+      const rings = [10, 30, 50, 70, 90];
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 1;
+
+      rings.forEach(r => {
+        ctx.beginPath();
+        ctx.arc(CX, CY, r * SCALE, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.fillStyle = '#475569';
+        ctx.font = '10px monospace';
+        ctx.fillText(`${r}m`, CX + 4, CY - r * SCALE + 12);
+      });
+
+      // Crosshairs
+      ctx.beginPath();
+      ctx.moveTo(CX, 0); ctx.lineTo(CX, canvas.height);
+      ctx.moveTo(0, CY); ctx.lineTo(canvas.width, CY);
+      ctx.stroke();
+
+      // Ego vehicle at center
+      ctx.fillStyle = '#38bdf8';
+      ctx.beginPath();
+      ctx.arc(CX, CY, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function renderCells(gridData) {
+      drawGrid();
+
+      for (let i = 0; i < gridData.length; i++) {
+        const cell = gridData[i];
+        const x = cell[0];
+        const y = cell[1];
+        const label = cell[4];
+        const dz = cell[3];
+
+        const px = CX + x * SCALE;
+        const py = CY - y * SCALE;
+
+        if (px < 0 || px > canvas.width || py < 0 || py > canvas.height) continue;
+
+        ctx.fillStyle = colors[label] || '#94a3b8';
+        const size = (label === 3 || dz > 0.15) ? 3.5 : 2;
+        ctx.fillRect(px - size/2, py - size/2, size, size);
+      }
+    }
+
+    function connect() {
+      const ws = new WebSocket('ws://127.0.0.1:8000/ws/stream_map');
+
+      ws.onopen = () => {
+        statusDot.className = 'status-dot online';
+        statusText.textContent = 'Connected';
+      };
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        const { header, telemetry, grid_data, threats } = data;
+
+        engineBadge.textContent = header.active_engine;
+        fpsVal.innerHTML = `${telemetry.fps.toFixed(1)} <span style="font-size: 0.8rem;">FPS</span>`;
+        latVal.innerHTML = `${telemetry.latency_ms.toFixed(2)} <span style="font-size: 0.8rem;">ms</span>`;
+        memVal.textContent = `${telemetry.memory_saved_percent.toFixed(1)}%`;
+        cellsVal.textContent = telemetry.compressed_cells_count.toLocaleString();
+
+        renderCells(grid_data);
+
+        // Update threats
+        threatCount.textContent = threats.length;
+        if (threats.length > 0) {
+          threatFeed.innerHTML = threats.slice(0, 10).map(t => `
+            <div class="threat-item">
+              <b>${t.type}</b> @ ${t.distance_m.toFixed(1)}m<br>
+              <span style="color: #94a3b8;">Depth: ${t.depth_m.toFixed(2)}m | [${t.coordinates[0].toFixed(1)}, ${t.coordinates[1].toFixed(1)}]</span>
+            </div>
+          `).join('');
+        }
+      };
+
+      ws.onclose = () => {
+        statusDot.className = 'status-dot';
+        statusText.textContent = 'Disconnected (retrying...)';
+        setTimeout(connect, 1500);
+      };
+    }
+
+    drawGrid();
+    connect();
+  </script>
+</body>
+</html>
